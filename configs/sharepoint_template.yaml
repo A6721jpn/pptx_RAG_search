@@ -1,0 +1,81 @@
+# SharePoint PPTX RAG 設定ファイルテンプレート
+
+sharepoint:
+  # Azure AD (Entra ID) 認証情報
+  # Azure Portalでアプリ登録を行い、以下の情報を取得
+  tenant_id: "YOUR_TENANT_ID"          # テナントID (ディレクトリID)
+  client_id: "YOUR_CLIENT_ID"          # アプリケーション（クライアント）ID
+  client_secret: "YOUR_CLIENT_SECRET"  # クライアントシークレット
+
+  # SharePointサイトURL（複数指定可能）
+  site_urls:
+    - "https://company.sharepoint.com/sites/Engineering"
+    - "https://company.sharepoint.com/sites/DesignGuides"
+    # 必要に応じて追加
+
+  # 対象ドキュメントライブラリ名（デフォルト: "Documents"）
+  library_name: "Documents"
+
+  # スキャン対象フォルダ（オプション、空の場合はルートから全スキャン）
+  target_folders:
+    - "Design Guides"
+    - "Mechanical Standards"
+    # 空にするとライブラリ全体をスキャン
+
+processing:
+  # バッチサイズ（一度に処理するファイル数）
+  batch_size: 50
+
+  # 並列ダウンロード数
+  parallel_downloads: 10
+
+  # リトライ回数
+  retry_attempts: 3
+
+  # 一時ファイル保存先
+  temp_dir: "data/pptx_temp"
+
+  # 処理状態データベース
+  db_path: "data/processed_files.db"
+
+qdrant:
+  # Qdrantインデックス保存先
+  path: "index/qdrant_storage"
+
+  # コレクション名
+  collection_name: "pptx_slides"
+
+  # ベクトル次元数（使用する埋め込みモデルに合わせて設定）
+  text_vector_size: 768      # e5-base-v2
+  clip_vector_size: 512      # ViT-B/32
+
+embeddings:
+  # テキスト埋め込みモデル
+  text_model: "intfloat/e5-base-v2"
+  # 代替: "BAAI/bge-base-en-v1.5"
+
+  # CLIP埋め込みモデル
+  clip_model: "openai/clip-vit-base-patch32"
+
+  # バッチサイズ
+  text_batch_size: 32
+  image_batch_size: 16
+
+  # デバイス（"cpu" or "cuda"）
+  device: "cpu"
+
+logging:
+  # ログレベル
+  level: "INFO"
+
+  # ログファイル
+  file: "data/logs/sync_pipeline.log"
+
+  # ログローテーション
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+schedule:
+  # スケジュール実行設定（Celery利用時）
+  # cron形式: "分 時 日 月 曜日"
+  daily_sync: "0 2 * * *"  # 毎日午前2時
