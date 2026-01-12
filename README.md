@@ -31,15 +31,66 @@ SharePoint Online/Server
     - Qdrantローカルインスタンス
 ```
 
-## 🚀 簡単スタート: PDF版POC（推奨）
+## 🚀 簡単スタート: ローカルPDF版POC（最推奨）
 
-Azure ADアプリ登録なしで、**今すぐ**POCを実行できます！
+**完全ローカル**でPOCを実行！Azure AD・Power Automateライセンス不要！
 
 ### メリット
 - ✅ Azure ADアプリ登録不要
-- ✅ PowerPoint COM不要（軽量・安定）
+- ✅ Power Automateライセンス不要
+- ✅ 完全ローカルで動作
 - ✅ ファイルサイズが小さい（ディスク容量節約）
-- ✅ Power Automateで自動PDF化
+- ✅ 自動増分変換（変更されたファイルのみ）
+
+### 手順（所要時間: 10分）
+
+1. **設定ファイルを作成**
+   ```bash
+   # テンプレートをコピー
+   cp configs/local_convert.yaml configs/my_convert.yaml
+
+   # エディタで編集（フォルダパスを実際のパスに変更）
+   notepad configs/my_convert.yaml
+   ```
+
+   **設定例**（`configs/my_convert.yaml`）:
+   ```yaml
+   source:
+     pptx_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pptx"
+
+   output:
+     pdf_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pdf"
+   ```
+
+2. **PPTX→PDF変換を実行**（初回のみ時間がかかります）
+   ```bash
+   python local_pptx_to_pdf.py --config configs/my_convert.yaml
+   ```
+
+   - 初回: すべてのPPTXをPDF化
+   - 2回目以降: 変更されたファイルのみ自動検出して変換
+
+3. **PDF版POCを実行**
+   ```bash
+   python local_poc_pdf.py --source "C:\Users\aokuni\Lenovo\test_okuni - ドキュメント\pdf" --full
+   ```
+
+### 自動化（オプション）
+
+**Windowsタスクスケジューラーで定期実行:**
+
+1. タスクスケジューラーを開く
+2. 「基本タスクの作成」
+3. トリガー: 毎日、または起動時
+4. 操作: プログラムの開始
+   - プログラム: `python`
+   - 引数: `local_pptx_to_pdf.py --config configs/my_convert.yaml`
+
+---
+
+## 📊 PDF版POC（Power Automate使用）
+
+Power Automateライセンスがある場合の代替方法
 
 ### 手順
 
@@ -50,22 +101,12 @@ Azure ADアプリ登録なしで、**今すぐ**POCを実行できます！
 2. **PDFフォルダをOneDriveで同期**
    ```
    SharePoint → 同期ボタンクリック → OneDriveで同期開始
-   同期先: C:\Users\[名前]\OneDrive - [会社]\[サイト] - Documents\PDF_Converted
    ```
 
-3. **Python環境構築**
-   ```bash
-   pip install pdfplumber pdf2image
-   # popplerのインストールも必要（Windows）
-   # https://github.com/oschwartz10612/poppler-windows/releases/
-   ```
-
-4. **POC実行**
+3. **POC実行**
    ```bash
    python local_poc_pdf.py --source "C:\Users\...\OneDrive\...\PDF_Converted" --full
    ```
-
-**詳細**: [Power Automate PDF変換フロー設計](doc/power_automate_pdf_flow.md)
 
 ---
 

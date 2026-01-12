@@ -1,0 +1,38 @@
+# ローカルPDF変換設定ファイル
+
+# PPTXファイルの監視フォルダ
+source:
+  # PPTXファイルが格納されているフォルダ
+  pptx_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pptx"
+
+  # 再帰的にサブフォルダもスキャンするか
+  recursive: true
+
+# PDF出力設定
+output:
+  # PDF出力先フォルダ
+  pdf_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pdf"
+
+  # 元のフォルダ構造を保持するか（trueの場合、サブフォルダ構造を維持）
+  preserve_structure: true
+
+# 変換設定
+conversion:
+  # 変換履歴データベース
+  db_path: "data/pdf_conversion.db"
+
+  # PowerPoint起動オプション
+  powerpoint:
+    visible: false  # PowerPointウィンドウを表示しない
+
+  # PDF品質設定
+  pdf_quality: "standard"  # standard, high, minimum
+
+  # エラー時の動作
+  on_error: "skip"  # skip（スキップ）, retry（リトライ）, stop（停止）
+  retry_attempts: 3
+
+# ログ設定
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "data/logs/pdf_conversion.log"

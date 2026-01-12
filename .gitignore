@@ -29,11 +29,12 @@ data/backups/
 # Qdrant index
 index/qdrant_storage/
 
-# Configuration (contains secrets)
+# Configuration (contains secrets and local paths)
 configs/sharepoint_prod.yaml
 configs/sharepoint_poc.yaml
 configs/*_prod.yaml
 configs/*_poc.yaml
+configs/my_convert.yaml
 .env
 
 # Temporary files
