@@ -17,15 +17,13 @@
 - **スケール**: 数十ファイル → 数百〜数千ファイル
 - **処理モデル**: 手動実行 → 自動バッチ処理 + 増分更新
 - **認証**: なし → OAuth 2.0 / Entra ID
-- **デプロイ**: ローカルマシン → 専用処理サーバー or Azure Functions
+- **デプロイ**: ローカルマシン → 専用Windowsサーバー
 
 ---
 
-## 2. アーキテクチャオプション
+## 2. アーキテクチャ
 
-### オプションA: 専用Windowsサーバー (推奨 - Phase 1)
-
-**構成:**
+### 2.1 システム構成
 ```
 SharePoint Online/Server
     ↓ (Microsoft Graph API or SharePoint REST API)
@@ -36,61 +34,26 @@ SharePoint Online/Server
     - スケジューラー (タスクスケジューラー or Celery)
 ```
 
+### 2.2 主な特徴
+
 **メリット:**
 - 既存のPowerPoint COM実装を再利用可能
 - 安定したレンダリング品質
 - ローカルQdrantで低レイテンシ
 - 実装が比較的シンプル
 
-**デメリット:**
-- サーバーのスケールアウトが困難
-- COM処理はシングルスレッド制約あり
-- Windowsサーバーのメンテナンスコスト
+**制約事項:**
+- COM処理はシングルスレッド制約あり（順次処理必須）
+- Windowsサーバー環境が必要
 
-**適用ケース:**
+**適用規模:**
 - 数百〜数千ファイル規模
-- 1日1回のバッチ更新で十分
-- 既存のオンプレミスインフラ活用
+- 1日1回のバッチ更新
+- 既存のオンプレミスインフラ活用可能
 
 ---
 
-### オプションB: Azure Functions + クラウドサービス (スケーラブル - Phase 2)
-
-**構成:**
-```
-SharePoint Online
-    ↓ (Microsoft Graph API)
-Azure Functions (Python/Node.js)
-    - ファイル変更検知 (Event Grid or Webhook)
-    - PPTX処理 (aspose-slides or libreoffice-headless)
-    ↓
-Azure Blob Storage (レンダリングPNG保存)
-    ↓
-Azure Cognitive Search or Qdrant Cloud
-    - ベクトルインデックス
-```
-
-**メリット:**
-- 自動スケールアウト
-- イベント駆動でリアルタイム更新
-- サーバーレスでメンテナンス低減
-- COM依存なし
-
-**デメリット:**
-- PowerPoint COMが使えないため代替ツール必要
-  - `aspose-slides-python`: 商用ライセンス必要
-  - `libreoffice --headless`: レンダリング品質が劣る可能性
-- Azure利用コスト
-- 初期実装コストが高い
-
-**適用ケース:**
-- 数千〜数万ファイル規模
-- リアルタイム更新が必要
-- フルクラウド環境
-
----
-
-## 3. SharePoint統合設計 (オプションA: Windowsサーバー)
+## 3. SharePoint統合設計
 
 ### 3.1 認証方法
 
@@ -605,7 +568,7 @@ sqlite3 data/processed_files.db ".backup 'data/backups/processed_files_$(date +%
 
 ## 10. コスト見積もり (1000ファイル想定)
 
-### Windowsサーバーオプション
+### システム運用コスト
 
 | 項目 | コスト (月額) |
 |------|---------------|
@@ -613,6 +576,8 @@ sqlite3 data/processed_files.db ".backup 'data/backups/processed_files_$(date +%
 | ストレージ (500GB Premium SSD) | $70 |
 | アウトバウンド通信 (100GB) | $9 |
 | **合計** | **$219/月** |
+
+**注記:** オンプレミスサーバーを使用する場合はクラウドコストは不要
 
 ### 処理時間見積もり
 
@@ -634,11 +599,21 @@ sqlite3 data/processed_files.db ".backup 'data/backups/processed_files_$(date +%
    - テストサイトの確保
 
 3. **実装開始**
-   - SharePoint統合モジュール
-   - バッチ処理パイプライン
+   - SharePoint統合モジュール（実装済み）
+   - バッチ処理パイプライン（実装済み）
 
 ---
 
-**付録:** 実装サンプルコードは `src/sharepoint_sync/` に配置予定
+## 付録: 実装済みコンポーネント
+
+すべての実装コードは `src/sharepoint_sync/` ディレクトリに配置されています：
+
+- **sharepoint_client.py**: Microsoft Graph API クライアント
+- **sync_pipeline.py**: バッチ処理パイプライン
+- **db_manager.py**: 処理状態管理 (`src/utils/`)
+
+設定テンプレートは `configs/sharepoint_template.yaml` を参照してください。
+
+---
 
 End of document.
