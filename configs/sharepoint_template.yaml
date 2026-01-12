@@ -1,4 +1,4 @@
-# SharePoint PPTX RAG 設定ファイルテンプレート
+# SharePoint PPTX RAG 設定ファイルテンプレート（中規模POC用）
 
 sharepoint:
   # Azure AD (Entra ID) 認証情報
@@ -7,27 +7,27 @@ sharepoint:
   client_id: "YOUR_CLIENT_ID"          # アプリケーション（クライアント）ID
   client_secret: "YOUR_CLIENT_SECRET"  # クライアントシークレット
 
-  # SharePointサイトURL（複数指定可能）
+  # SharePointサイトURL（POCでは1つ推奨）
   site_urls:
-    - "https://company.sharepoint.com/sites/Engineering"
-    - "https://company.sharepoint.com/sites/DesignGuides"
-    # 必要に応じて追加
+    - "https://yourcompany.sharepoint.com/sites/YourSite"
+    # POCでは1つのサイトに絞ることを推奨
 
   # 対象ドキュメントライブラリ名（デフォルト: "Documents"）
   library_name: "Documents"
 
   # スキャン対象フォルダ（オプション、空の場合はルートから全スキャン）
-  target_folders:
-    - "Design Guides"
-    - "Mechanical Standards"
+  target_folders: []
+    # 例: ["Design Guides", "Mechanical Standards"]
     # 空にするとライブラリ全体をスキャン
 
 processing:
   # バッチサイズ（一度に処理するファイル数）
-  batch_size: 50
+  # ローカルPC用に小さめに設定
+  batch_size: 20
 
   # 並列ダウンロード数
-  parallel_downloads: 10
+  # ローカルPC用に控えめに設定
+  parallel_downloads: 5
 
   # リトライ回数
   retry_attempts: 3
@@ -42,8 +42,8 @@ qdrant:
   # Qdrantインデックス保存先
   path: "index/qdrant_storage"
 
-  # コレクション名
-  collection_name: "pptx_slides"
+  # コレクション名（POC用）
+  collection_name: "pptx_slides_poc"
 
   # ベクトル次元数（使用する埋め込みモデルに合わせて設定）
   text_vector_size: 768      # e5-base-v2
