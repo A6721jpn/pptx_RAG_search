@@ -1,0 +1,8 @@
+ingest:
+  data_dir: "data/pptx"
+  output_dir: "data"
+  db_path: "data/processed_files.db"
+
+logging:
+  level: "INFO"
+  file: "data/logs/app.log"
