@@ -1,55 +1,62 @@
-# SharePoint大規模展開設計書
+# SharePoint中規模POC設計書
 
 **著者:** Claude
 **日付:** 2026-01-12
-**ステータス:** Draft v1
+**ステータス:** Draft v2 - ローカルPC対応
 **ベースドキュメント:** pptx_rag_local_poc_design.md
 
 ---
 
 ## 1. 概要
 
-ローカルPOCで検証したPPTX RAGシステムを、SharePoint上の大量のPPTXファイルに対して展開するための設計。
+ローカルPOCで検証したPPTX RAGシステムを、SharePoint上の実際のPPTXファイル（約100ファイル規模）に対して実行し、実用性と処理速度を検証するための中規模POC設計。
 
 ### 1.1 主な変更点
 
 - **データソース**: ローカルファイル → SharePoint Online/Server
-- **スケール**: 数十ファイル → 数百〜数千ファイル
-- **処理モデル**: 手動実行 → 自動バッチ処理 + 増分更新
+- **スケール**: 数十ファイル → 約100ファイル（中規模POC）
+- **処理モデル**: 手動実行 → バッチ処理 + 増分更新
 - **認証**: なし → OAuth 2.0 / Entra ID
-- **デプロイ**: ローカルマシン → 専用Windowsサーバー
+- **実行環境**: ローカルWindows PC
 
 ---
 
 ## 2. アーキテクチャ
 
-### 2.1 システム構成
+### 2.1 システム構成（ローカルPC）
 ```
 SharePoint Online/Server
-    ↓ (Microsoft Graph API or SharePoint REST API)
-専用Windowsサーバー
+    ↓ (Microsoft Graph API)
+ローカルWindows PC
     - SharePoint統合モジュール
-    - PPTX処理パイプライン (COM使用)
+    - PPTX処理パイプライン (PowerPoint COM使用)
     - Qdrantローカルインスタンス
-    - スケジューラー (タスクスケジューラー or Celery)
+    - 手動実行またはスケジューラー（オプション）
 ```
 
-### 2.2 主な特徴
+### 2.2 POCの目的と特徴
 
-**メリット:**
-- 既存のPowerPoint COM実装を再利用可能
-- 安定したレンダリング品質
+**検証項目:**
+- SharePoint接続と認証の動作確認
+- 実際のファイルに対する処理速度の測定
+- 100ファイル規模での実用性評価
+- エラーハンドリングの妥当性確認
+
+**技術的特徴:**
+- PowerPoint COM による安定したレンダリング
 - ローカルQdrantで低レイテンシ
-- 実装が比較的シンプル
+- 増分更新による効率的な再処理
+- 処理状態の永続化とリトライ機能
 
 **制約事項:**
-- COM処理はシングルスレッド制約あり（順次処理必須）
-- Windowsサーバー環境が必要
+- COM処理はシングルスレッド（順次処理）
+- Windows環境必須（PowerPoint要インストール）
+- ローカルPC実行のため、大規模展開時は別途検討必要
 
-**適用規模:**
-- 数百〜数千ファイル規模
-- 1日1回のバッチ更新
-- 既存のオンプレミスインフラ活用可能
+**POC規模:**
+- 対象: 約100ファイル
+- 想定処理時間: 初回50分程度（1ファイル30秒想定）
+- 増分更新: 5-10分程度（変更分のみ）
 
 ---
 
@@ -477,130 +484,278 @@ def send_alert(severity, message, details):
 
 ---
 
-## 8. デプロイメント手順
+## 8. 中規模POC実行手順
 
-### Phase 1: 開発環境セットアップ (1-2日)
+### ステップ1: 環境セットアップ（30分）
 
-1. **Azure ADアプリ登録**
-   - Azure Portalでアプリ登録
-   - 必要な権限付与 (`Sites.Read.All`, `Files.Read.All`)
-   - クライアントシークレット生成
+1. **前提条件確認**
+   - Windows 10/11 PC
+   - Microsoft PowerPoint インストール済み
+   - Python 3.9+ インストール済み
+   - SharePointアクセス権限あり
 
-2. **開発環境構築**
+2. **リポジトリクローン**
    ```bash
-   git clone <repository>
+   git clone https://github.com/A6721jpn/pptx_RAG_search.git
    cd pptx_RAG_search
+   ```
+
+3. **Python環境構築**
+   ```bash
    python -m venv venv
    venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-3. **設定ファイル作成**
-   ```yaml
-   # configs/sharepoint_prod.yaml
-   sharepoint:
-     tenant_id: "your-tenant-id"
-     client_id: "your-client-id"
-     client_secret: "your-client-secret"
-     site_urls:
-       - "https://company.sharepoint.com/sites/Engineering"
-       - "https://company.sharepoint.com/sites/DesignGuides"
+### ステップ2: Azure AD設定（30分）
 
-   processing:
-     batch_size: 50
-     parallel_downloads: 10
-     retry_attempts: 3
+1. **Azure Portalでアプリ登録**
+   - [Azure Portal](https://portal.azure.com) → Azure Active Directory
+   - アプリの登録 → 新規登録
+   - アプリ名: "PPTX-RAG-POC"
+   - サポートされているアカウントの種類: 「この組織ディレクトリのみ」
 
-   qdrant:
-     path: "index/qdrant_storage"
-     collection_name: "pptx_slides"
-   ```
+2. **API権限追加**
+   - APIのアクセス許可 → Microsoft Graph
+   - アプリケーション権限:
+     - `Sites.Read.All`
+     - `Files.Read.All`
+   - 「管理者の同意を付与」をクリック
 
-### Phase 2: POC実装 (3-5日)
+3. **クライアントシークレット作成**
+   - 証明書とシークレット → 新しいクライアントシークレット
+   - 説明: "POC用"、有効期限: 6ヶ月
+   - **値をコピー**（後で使用）
 
-1. SharePoint統合モジュール実装
-2. バッチ処理パイプライン実装
-3. 小規模テスト (10-50ファイル)
-4. エラーハンドリング確認
+4. **情報をメモ**
+   - テナントID（ディレクトリID）
+   - アプリケーションID（クライアントID）
+   - クライアントシークレット（値）
 
-### Phase 3: スケールテスト (2-3日)
-
-1. 中規模テスト (100-500ファイル)
-2. パフォーマンスチューニング
-3. メモリ使用量最適化
-4. ログ・監視確認
-
-### Phase 4: 本番展開 (1-2日)
-
-1. 本番サーバーセットアップ
-2. フルスキャン実行
-3. スケジューラー設定
-4. 運用手順書作成
-
----
-
-## 9. 運用考慮事項
-
-### 9.1 セキュリティ
-
-- **シークレット管理**: Azure Key Vault使用推奨
-- **アクセス制御**: 最小権限の原則
-- **ログ保護**: 個人情報を含まないよう注意
-- **ネットワーク**: ファイアウォール設定
-
-### 9.2 バックアップ
+### ステップ3: 設定ファイル作成（10分）
 
 ```bash
-# Qdrantインデックスのバックアップ
-tar -czf qdrant_backup_$(date +%Y%m%d).tar.gz index/qdrant_storage/
-
-# 処理状態DBのバックアップ
-sqlite3 data/processed_files.db ".backup 'data/backups/processed_files_$(date +%Y%m%d).db'"
+# テンプレートをコピー
+cp configs/sharepoint_template.yaml configs/sharepoint_poc.yaml
 ```
 
-### 9.3 ディザスタリカバリ
+**`configs/sharepoint_poc.yaml` を編集:**
+```yaml
+sharepoint:
+  tenant_id: "YOUR_TENANT_ID"        # ステップ2でメモしたテナントID
+  client_id: "YOUR_CLIENT_ID"        # アプリケーションID
+  client_secret: "YOUR_SECRET"       # クライアントシークレット
+  site_urls:
+    - "https://yourcompany.sharepoint.com/sites/YourSite"  # 実際のSharePointサイトURL
 
-- **定期バックアップ**: 週次フルバックアップ
-- **復旧手順**: ドキュメント化
-- **テスト**: 四半期ごとに復旧テスト
+processing:
+  batch_size: 20         # 小さめに設定（ローカルPC用）
+  parallel_downloads: 5  # ローカルPC用に控えめ
+  retry_attempts: 3
+
+qdrant:
+  path: "index/qdrant_storage"
+  collection_name: "pptx_slides_poc"
+```
+
+### ステップ4: 接続テスト（10分）
+
+**SharePoint接続確認スクリプト実行:**
+```python
+# test_connection.py
+import asyncio
+from pathlib import Path
+import yaml
+from src.sharepoint_sync.sharepoint_client import SharePointClient
+
+async def test():
+    # 設定読み込み
+    with open('configs/sharepoint_poc.yaml') as f:
+        config = yaml.safe_load(f)
+
+    # クライアント作成
+    client = SharePointClient(
+        tenant_id=config['sharepoint']['tenant_id'],
+        client_id=config['sharepoint']['client_id'],
+        client_secret=config['sharepoint']['client_secret']
+    )
+
+    try:
+        # サイトID取得
+        site_url = config['sharepoint']['site_urls'][0]
+        site_id = await client.get_site_id(site_url)
+        print(f"✅ SharePoint接続成功: {site_id}")
+
+        # ドライブID取得
+        drive_id = await client.get_drive_id(site_id)
+        print(f"✅ ドライブアクセス成功: {drive_id}")
+
+        # ファイル一覧取得（最初の10件）
+        files = await client.list_pptx_files(site_id, drive_id)
+        print(f"✅ PPTXファイル検出: {len(files)}件")
+        for i, f in enumerate(files[:10], 1):
+            print(f"  {i}. {f['name']} ({f['size']/1024:.1f} KB)")
+
+    finally:
+        await client.close()
+
+if __name__ == "__main__":
+    asyncio.run(test())
+```
+
+実行:
+```bash
+python test_connection.py
+```
+
+### ステップ5: 中規模POC実行（1-2時間）
+
+**初回フルスキャン:**
+```bash
+python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_poc.yaml --full
+```
+
+**処理の進捗確認:**
+- ターミナルに進捗ログが表示されます
+- 処理状態は `data/processed_files.db` に保存されます
+- ログは `data/logs/sync_pipeline.log` に記録されます
+
+### ステップ6: 結果確認（10分）
+
+**処理統計の確認:**
+```python
+from pathlib import Path
+from src.utils.db_manager import ProcessedFilesDB
+
+db = ProcessedFilesDB(Path('data/processed_files.db'))
+stats = db.get_statistics()
+
+print("=== POC処理結果 ===")
+print(f"総ファイル数: {stats['total_files']}")
+print(f"成功: {stats['by_status'].get('success', 0)}")
+print(f"失敗: {stats['by_status'].get('failed', 0)}")
+print(f"総スライド数: {stats['total_slides']}")
+print(f"平均処理時間: {stats['avg_processing_seconds']:.2f}秒/ファイル")
+print(f"最終処理日時: {stats['last_processed']}")
+
+# 失敗ファイルの確認
+failed = db.get_failed_files()
+if failed:
+    print(f"\n失敗ファイル ({len(failed)}件):")
+    for f in failed:
+        print(f"  - {f['file_name']}: {f['error_message']}")
+```
+
+### ステップ7: 増分更新テスト（オプション）
+
+SharePoint上でファイルを更新後:
+```bash
+python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_poc.yaml --incremental
+```
+
+変更されたファイルのみが再処理されることを確認します。
 
 ---
 
-## 10. コスト見積もり (1000ファイル想定)
+## 9. POC評価観点
 
-### システム運用コスト
+### 9.1 性能評価
 
-| 項目 | コスト (月額) |
-|------|---------------|
-| Windows Server (Azure VM Standard_D4s_v3) | $140 |
-| ストレージ (500GB Premium SSD) | $70 |
-| アウトバウンド通信 (100GB) | $9 |
-| **合計** | **$219/月** |
+**測定項目:**
+- ファイルあたりの平均処理時間
+- 全体の処理時間（100ファイル想定: 50分程度）
+- メモリ使用量のピーク値
+- ダウンロード速度
+- エラー発生率
 
-**注記:** オンプレミスサーバーを使用する場合はクラウドコストは不要
+**評価方法:**
+```python
+# 処理統計の取得
+from src.utils.db_manager import ProcessedFilesDB
+from pathlib import Path
 
-### 処理時間見積もり
+db = ProcessedFilesDB(Path('data/processed_files.db'))
+stats = db.get_statistics()
 
-- 1ファイルあたり平均処理時間: 30秒
-- 1000ファイル: 約8.3時間 (初回フルスキャン)
-- 増分更新 (5%変更): 約25分/日
+print(f"平均処理時間: {stats['avg_processing_seconds']:.2f}秒")
+print(f"成功率: {stats['by_status'].get('success', 0) / stats['total_files'] * 100:.1f}%")
+```
+
+### 9.2 機能評価
+
+**確認項目:**
+- ✅ SharePoint認証の安定性
+- ✅ 増分更新の正確性（変更ファイルのみ処理）
+- ✅ エラーハンドリング（リトライ機能）
+- ✅ 処理状態の永続化
+- ✅ ログの有用性
+
+### 9.3 セキュリティ（POC段階）
+
+**基本的な対策:**
+- 設定ファイル（`sharepoint_poc.yaml`）を `.gitignore` に追加
+- クライアントシークレットは環境変数での管理も検討
+- ログに機密情報を含めない
+
+### 9.4 データバックアップ（POC段階）
+
+**簡易バックアップ:**
+```bash
+# Windowsの場合
+mkdir data\backups
+copy data\processed_files.db data\backups\processed_files_%date:~0,4%%date:~5,2%%date:~8,2%.db
+
+# Qdrantインデックスのコピー
+xcopy /E /I index\qdrant_storage data\backups\qdrant_backup_%date:~0,4%%date:~5,2%%date:~8,2%
+```
 
 ---
 
-## 11. 次のステップ
+## 10. POC処理時間見積もり（100ファイル規模）
 
-1. **要件確認**
-   - SharePoint環境 (Online/Server)
-   - ファイル数・総容量
-   - 更新頻度
+### 想定処理時間
 
-2. **Azure AD準備**
-   - アプリ登録権限の取得
-   - テストサイトの確保
+| フェーズ | 時間 | 備考 |
+|---------|------|------|
+| SharePoint接続・ファイル一覧取得 | 1-2分 | ネットワーク速度に依存 |
+| ファイルダウンロード（並列5） | 5-10分 | ファイルサイズに依存 |
+| PPTX処理（テキスト抽出・レンダリング） | 40-50分 | 1ファイル30秒×100 |
+| 埋め込み計算・インデックス更新 | 5-10分 | CPU性能に依存 |
+| **合計（初回フルスキャン）** | **約50-70分** | |
 
-3. **実装開始**
-   - SharePoint統合モジュール（実装済み）
-   - バッチ処理パイプライン（実装済み）
+**増分更新（5ファイル変更想定）:**
+- 約3-5分
+
+### リソース要件（ローカルPC）
+
+- **CPU**: 4コア以上推奨
+- **メモリ**: 8GB以上（16GB推奨）
+- **ディスク**: 10GB以上の空き容量
+- **ネットワーク**: 安定したインターネット接続
+
+---
+
+## 11. POC完了後の次のステップ
+
+### 評価結果に基づく判断
+
+**POC成功の場合:**
+1. 処理速度が実用的か評価
+2. エラー率が許容範囲か確認（<5%推奨）
+3. 大規模展開の検討（専用サーバー or クラウド）
+
+**改善が必要な場合:**
+1. ボトルネックの特定（ダウンロード/COM処理/埋め込み）
+2. パラメータチューニング（並列数、バッチサイズ）
+3. エラー原因の分析と対策
+
+### 大規模展開への移行
+
+POCで実用性が確認できた場合、以下を検討:
+- 専用Windowsサーバーへの移行
+- 自動スケジューリング設定
+- 監視・アラート機能の追加
+- 数百〜数千ファイルへのスケールアップ
 
 ---
 

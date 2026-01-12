@@ -1,39 +1,46 @@
-# PPTX RAG Search - SharePoint大規模展開
+# PPTX RAG Search - SharePoint中規模POC
 
-SharePoint上の大量のPowerPointファイルに対する検索可能なRAG（Retrieval-Augmented Generation）システム
+SharePoint上のPowerPointファイルに対する検索可能なRAG（Retrieval-Augmented Generation）システムの中規模POC
 
 ## 概要
 
-このプロジェクトは、SharePoint上に保存された数百〜数千のPowerPointファイルを対象に、テキストとビジュアルの両方を活用した高度な検索システムを提供します。
+このプロジェクトは、SharePoint上に保存された約100ファイル規模のPowerPointドキュメントライブラリを対象に、テキストとビジュアルの両方を活用した検索システムの実用性と処理速度を検証する中規模POCです。
+
+### POCの目的
+
+- **技術検証**: SharePoint統合の動作確認
+- **性能測定**: 実際のファイルに対する処理速度の計測
+- **実用性評価**: 100ファイル規模での運用可能性の判断
+- **課題発見**: ボトルネックやエラーの特定
 
 ### 主な機能
 
 - **SharePoint統合**: Microsoft Graph APIを使用したシームレスな連携
-- **マルチモーダル検索**: テキストと画像の両方から検索
+- **マルチモーダル検索**: テキストと画像の両方から検索（設計済み）
 - **増分更新**: 変更されたファイルのみを効率的に処理
-- **大規模対応**: バッチ処理と並列化による高スループット
-- **自動スケジューリング**: 定期的な自動同期
+- **エラーハンドリング**: リトライ機能と処理状態の永続化
 
 ### アーキテクチャ
 
 ```
-SharePoint Online
+SharePoint Online/Server
     ↓ (Microsoft Graph API)
-専用Windowsサーバー
+ローカルWindows PC
     - SharePoint同期モジュール
-    - PPTX処理パイプライン (COM)
+    - PPTX処理パイプライン (PowerPoint COM)
     - Qdrantローカルインスタンス
-    - スケジューラー
 ```
 
 ## セットアップ
 
-### 前提条件
+### 前提条件（ローカルPC）
 
-- **OS**: Windows 10/11 または Windows Server 2019+
-- **PowerPoint**: Microsoft PowerPoint（Office 365 または 2019+）
-- **Python**: 3.9+
-- **権限**: Azure AD アプリ登録権限
+- **OS**: Windows 10/11
+- **PowerPoint**: Microsoft PowerPoint インストール済み（Office 365 または 2019+）
+- **Python**: 3.9以上
+- **メモリ**: 8GB以上（16GB推奨）
+- **ディスク**: 10GB以上の空き容量
+- **権限**: Azure AD アプリ登録権限、SharePointアクセス権限
 
 ### 1. Azure AD アプリ登録
 
@@ -68,13 +75,13 @@ pip install -r requirements.txt
 
 ```bash
 # テンプレートをコピー
-cp configs/sharepoint_template.yaml configs/sharepoint_prod.yaml
+cp configs/sharepoint_template.yaml configs/sharepoint_poc.yaml
 
 # エディタで編集
-notepad configs/sharepoint_prod.yaml
+notepad configs/sharepoint_poc.yaml
 ```
 
-**`configs/sharepoint_prod.yaml`** を編集:
+**`configs/sharepoint_poc.yaml`** を編集:
 
 ```yaml
 sharepoint:
@@ -82,7 +89,14 @@ sharepoint:
   client_id: "あなたのクライアントID"
   client_secret: "あなたのクライアントシークレット"
   site_urls:
-    - "https://yourcompany.sharepoint.com/sites/Engineering"
+    - "https://yourcompany.sharepoint.com/sites/YourSite"  # 実際のサイトURL
+
+processing:
+  batch_size: 20         # ローカルPC用に小さめ
+  parallel_downloads: 5  # ローカルPC用に控えめ
+
+qdrant:
+  collection_name: "pptx_slides_poc"
 ```
 
 ### 4. Qdrant起動
@@ -97,21 +111,43 @@ docker run -d -p 6333:6333 -v $(pwd)/index/qdrant_storage:/qdrant/storage qdrant
 
 Qdrantはファイルベースでも動作します（設定不要）
 
-## 使い方
+## 使い方（POC実行）
 
-### 初回フルスキャン
+### ステップ1: SharePoint接続テスト
 
-```bash
-python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_prod.yaml --full
-```
-
-### 増分更新（変更されたファイルのみ）
+まず接続が正常に動作するか確認:
 
 ```bash
-python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_prod.yaml --incremental
+python test_connection.py
 ```
 
-### 処理状態確認
+正常に動作すると、以下のように表示されます:
+```
+✅ SharePoint接続成功: [サイトID]
+✅ ドライブアクセス成功: [ドライブID]
+✅ PPTXファイル検出: 100件
+  1. design_guide_01.pptx (2.3 MB)
+  2. mechanical_standard.pptx (1.5 MB)
+  ...
+```
+
+### ステップ2: 中規模POC実行（初回フルスキャン）
+
+約100ファイルを処理（想定時間: 50-70分）:
+
+```bash
+python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_poc.yaml --full
+```
+
+### ステップ3: 増分更新テスト
+
+SharePoint上でファイルを変更後、増分更新を実行:
+
+```bash
+python src/sharepoint_sync/sync_pipeline.py --config configs/sharepoint_poc.yaml --incremental
+```
+
+### ステップ4: POC結果確認
 
 ```bash
 python -c "
@@ -121,10 +157,20 @@ from src.utils.db_manager import ProcessedFilesDB
 db = ProcessedFilesDB(Path('data/processed_files.db'))
 stats = db.get_statistics()
 
-print('総ファイル数:', stats['total_files'])
-print('総スライド数:', stats['total_slides'])
-print('状態別件数:', stats['by_status'])
-print('平均処理時間:', f\"{stats['avg_processing_seconds']:.2f}秒\")
+print('=== POC処理結果 ===')
+print(f\"総ファイル数: {stats['total_files']}\")
+print(f\"成功: {stats['by_status'].get('success', 0)}\")
+print(f\"失敗: {stats['by_status'].get('failed', 0)}\")
+print(f\"総スライド数: {stats['total_slides']}\")
+print(f\"平均処理時間: {stats['avg_processing_seconds']:.2f}秒/ファイル\")
+print(f\"成功率: {stats['by_status'].get('success', 0) / stats['total_files'] * 100:.1f}%\")
+
+# 失敗ファイル確認
+failed = db.get_failed_files()
+if failed:
+    print(f\"\\n失敗ファイル ({len(failed)}件):\")
+    for f in failed[:5]:
+        print(f\"  - {f['file_name']}: {f['error_message']}\")
 "
 ```
 

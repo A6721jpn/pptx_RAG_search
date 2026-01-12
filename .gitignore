@@ -31,7 +31,9 @@ index/qdrant_storage/
 
 # Configuration (contains secrets)
 configs/sharepoint_prod.yaml
+configs/sharepoint_poc.yaml
 configs/*_prod.yaml
+configs/*_poc.yaml
 .env
 
 # Temporary files
