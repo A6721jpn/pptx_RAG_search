@@ -16,3 +16,28 @@ env/
 dist/
 build/
 *.egg-info/
+
+# Project-specific data files
+data/pptx_temp/
+data/rendered/
+data/extracted/
+data/logs/
+data/backups/
+*.db
+*.db-journal
+
+# Qdrant index
+index/qdrant_storage/
+
+# Configuration (contains secrets)
+configs/sharepoint_prod.yaml
+configs/*_prod.yaml
+.env
+
+# Temporary files
+*.tmp
+*.pptx
+*.ppt
+
+# macOS
+.DS_Store
