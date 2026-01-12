@@ -31,7 +31,45 @@ SharePoint Online/Server
     - Qdrantローカルインスタンス
 ```
 
-## セットアップ
+## 🚀 簡単スタート: PDF版POC（推奨）
+
+Azure ADアプリ登録なしで、**今すぐ**POCを実行できます！
+
+### メリット
+- ✅ Azure ADアプリ登録不要
+- ✅ PowerPoint COM不要（軽量・安定）
+- ✅ ファイルサイズが小さい（ディスク容量節約）
+- ✅ Power Automateで自動PDF化
+
+### 手順
+
+1. **SharePointでPDF変換フローを作成**（Power Automate）
+   - [詳細手順](doc/power_automate_pdf_flow.md)を参照
+   - SharePoint上のPPTXを自動的にPDFに変換
+
+2. **PDFフォルダをOneDriveで同期**
+   ```
+   SharePoint → 同期ボタンクリック → OneDriveで同期開始
+   同期先: C:\Users\[名前]\OneDrive - [会社]\[サイト] - Documents\PDF_Converted
+   ```
+
+3. **Python環境構築**
+   ```bash
+   pip install pdfplumber pdf2image
+   # popplerのインストールも必要（Windows）
+   # https://github.com/oschwartz10612/poppler-windows/releases/
+   ```
+
+4. **POC実行**
+   ```bash
+   python local_poc_pdf.py --source "C:\Users\...\OneDrive\...\PDF_Converted" --full
+   ```
+
+**詳細**: [Power Automate PDF変換フロー設計](doc/power_automate_pdf_flow.md)
+
+---
+
+## セットアップ（通常版 - Azure AD使用）
 
 ### 前提条件（ローカルPC）
 

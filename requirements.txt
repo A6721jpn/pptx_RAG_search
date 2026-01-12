@@ -4,6 +4,11 @@
 python-pptx>=0.6.23
 pywin32>=306  # Windows COM automation (PowerPoint rendering)
 
+# PDF processing (for PDF-based POC)
+pdfplumber>=0.10.0  # PDF text extraction
+pdf2image>=1.16.3   # PDF to image conversion (requires poppler)
+# Note: pdf2image requires poppler-utils (Windows: https://github.com/oschwartz10612/poppler-windows/releases/)
+
 # SharePoint integration
 msgraph-sdk>=1.0.0
 azure-identity>=1.15.0
