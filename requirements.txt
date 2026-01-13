@@ -1,46 +1,27 @@
-# Core dependencies for PPTX RAG system
+# Core dependencies for local PPTX RAG POC
 
 # PPTX processing
 python-pptx>=0.6.23
 pywin32>=306  # Windows COM automation (PowerPoint rendering)
 
-# Embeddings
-sentence-transformers>=2.2.2
-open-clip-torch>=2.23.0
+# PDF processing
+pdfplumber>=0.10.0  # PDF text extraction
+pdf2image>=1.16.3   # PDF to image conversion (requires poppler)
+# Note: pdf2image requires poppler-utils (Windows: https://github.com/oschwartz10612/poppler-windows/releases/)
+
+# Embeddings (CPU-friendly)
+sentence-transformers>=2.2.2  # Text embeddings
 torch>=2.0.0
 torchvision>=0.15.0
-Pillow>=10.0.0
+Pillow>=10.0.0  # Image processing
 
 # Vector database
 qdrant-client>=1.7.0
 
 # Utilities
 pyyaml>=6.0.1
-tenacity>=8.2.3
-python-dotenv>=1.0.0
-
-# Data processing
 numpy>=1.24.0
-pandas>=2.0.0
 
-# Logging
-structlog>=23.2.0
-
-# Development tools
+# Development tools (optional)
 pytest>=7.4.0
-pytest-asyncio>=0.21.0
 black>=23.0.0
-flake8>=6.0.0
-mypy>=1.5.0
-
-# CLI
-click>=8.1.0
-rich>=13.0.0
-
-# Bot Framework & LLM
-botbuilder-core>=4.14.0
-botbuilder-schema>=4.14.0
-aiohttp>=3.9.0
-cookiecutter>=2.1.0  # Common template dep
-openai>=1.0.0
-langdetect>=1.0.9
