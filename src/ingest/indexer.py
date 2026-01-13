@@ -128,7 +128,10 @@ class QdrantIndexer:
         # ポイント作成
         points = []
         for i, (page_info, embedding) in enumerate(zip(pages, embeddings)):
-            point_id = f"{doc_id}_{page_info['page_num']}"
+            # Qdrant requires UUID or integer ID
+            import uuid
+            # Use deterministic UUID based on doc_id and page_num
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{doc_id}_{page_info['page_num']}"))
 
             payload = {
                 "doc_id": doc_id,
@@ -173,12 +176,12 @@ class QdrantIndexer:
         """
         logger.info(f"検索実行: top_k={top_k}")
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector.tolist(),
+            query=query_vector.tolist(),
             limit=top_k,
             score_threshold=score_threshold
-        )
+        ).points
 
         # 結果を整形
         formatted_results = []

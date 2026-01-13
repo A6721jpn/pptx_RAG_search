@@ -18,11 +18,8 @@ build/
 *.egg-info/
 
 # Project-specific data files
-data/pptx_temp/
-data/rendered/
-data/extracted/
-data/logs/
-data/backups/
+# Ignore entire data directory and subdirectories
+data/
 *.db
 *.db-journal
 

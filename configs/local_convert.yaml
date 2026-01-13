@@ -3,7 +3,7 @@
 # PPTXファイルの監視フォルダ
 source:
   # PPTXファイルが格納されているフォルダ
-  pptx_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pptx"
+  pptx_folder: "C:\\github_repo\\pptx_RAG_serach\\data\\pptx"
 
   # 再帰的にサブフォルダもスキャンするか
   recursive: true
@@ -11,7 +11,7 @@ source:
 # PDF出力設定
 output:
   # PDF出力先フォルダ
-  pdf_folder: "C:\\Users\\aokuni\\Lenovo\\test_okuni - ドキュメント\\pdf"
+  pdf_folder: "C:\\github_repo\\pptx_RAG_serach\\data\\pdf"
 
   # 元のフォルダ構造を保持するか（trueの場合、サブフォルダ構造を維持）
   preserve_structure: true

@@ -151,6 +151,26 @@ class ProcessedFilesDB:
         cursor.execute(f"UPDATE processed_files SET {', '.join(fields)} WHERE file_path = ?", params)
         self.conn.commit()
 
+    def add_or_update_file(self, file_info: Dict[str, Any]) -> bool:
+        """
+        Check if file needs processing and register it.
+        Compatible with local_poc_pdf.py which expects file_info dict.
+        """
+        file_path = str(file_info['path'])
+        
+        # Calculate hash if not present (or use modified time logic)
+        # For simplicity in this alias, we assume file_info has what we need
+        # local_poc_pdf.py passes file_info with 'path', 'id' (as hash), 'size', 'modified'
+        
+        file_hash = file_info.get('id', '')
+        file_size = file_info.get('size', 0)
+        modified_time = file_info.get('modified').timestamp() if isinstance(file_info.get('modified'), datetime) else 0.0
+
+        if self.should_process(file_path, file_hash, modified_time):
+            self.register_file(file_path, file_hash, file_size, modified_time)
+            return True
+        return False
+
     def close(self):
         if self.conn:
             self.conn.close()

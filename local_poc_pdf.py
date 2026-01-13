@@ -114,22 +114,26 @@ class PDFPOCProcessor:
         return pages_text
 
     def render_pdf_pages(self, pdf_path: Path, output_dir: Path) -> list:
-        """PDFページを画像にレンダリング"""
+        """PDFページを画像にレンダリング (PyMuPDF使用)"""
         try:
-            from pdf2image import convert_from_path
+            import fitz
         except ImportError:
-            logger.error("pdf2imageがインストールされていません: pip install pdf2image")
-            logger.error("popplerも必要です: https://github.com/oschwartz10612/poppler-windows/releases/")
+            logger.error("pymupdfがインストールされていません: pip install pymupdf")
             raise
 
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        images = convert_from_path(pdf_path, dpi=150, fmt='png')
-
+        
+        doc = fitz.open(pdf_path)
         image_paths = []
-        for i, image in enumerate(images, 1):
+        
+        # 150 DPI相当 (72 * 2.08)
+        zoom = 150 / 72
+        mat = fitz.Matrix(zoom, zoom)
+
+        for i, page in enumerate(doc, 1):
             image_path = output_dir / f"page_{i:04d}.png"
-            image.save(image_path, 'PNG')
+            pix = page.get_pixmap(matrix=mat)
+            pix.save(str(image_path))
             image_paths.append(image_path)
 
         logger.info(f"レンダリング完了: {len(image_paths)}ページ")
@@ -261,17 +265,25 @@ class PDFPOCProcessor:
 
         # 完了
         duration = (datetime.now() - pipeline_start).total_seconds()
-        stats = self.db.get_statistics()
+        # stats = self.db.get_statistics()
 
         # Qdrant情報
-        qdrant_info = self.indexer.get_collection_info()
+        qdrant_info = {}
+        if self._qdrant_initialized:
+            try:
+                qdrant_info = self.indexer.get_collection_info()
+            except Exception as e:
+                logger.warning(f"Qdrant情報取得失敗: {e}")
 
         logger.info(f"\n=== POC完了 ===")
         logger.info(f"処理時間: {duration:.2f}秒")
         logger.info(f"成功: {total_processed}")
         logger.info(f"失敗: {total_failed}")
         logger.info(f"総ページ数: {total_pages}")
-        logger.info(f"Qdrantポイント数: {qdrant_info['points_count']}")
+        if qdrant_info:
+            logger.info(f"Qdrantポイント数: {qdrant_info.get('points_count', 'N/A')}")
+        else:
+            logger.info("Qdrantポイント数: N/A")
 
         return {
             'status': 'success',
@@ -279,7 +291,7 @@ class PDFPOCProcessor:
             'files_failed': total_failed,
             'total_pages': total_pages,
             'duration_seconds': duration,
-            'statistics': stats,
+            # 'statistics': stats,
             'qdrant_info': qdrant_info
         }
 

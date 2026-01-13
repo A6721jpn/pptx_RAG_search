@@ -202,10 +202,14 @@ class PPTXToPDFConverter:
             pythoncom.CoInitialize()
             self.powerpoint = win32com.client.Dispatch("PowerPoint.Application")
 
-            # ウィンドウを非表示
+            # ウィンドウを非表示（一部のPPTバージョンでは設定できない場合がある）
             visible = self.config['conversion']['powerpoint'].get('visible', False)
-            if hasattr(self.powerpoint, 'Visible'):
-                self.powerpoint.Visible = visible
+            try:
+                if hasattr(self.powerpoint, 'Visible'):
+                    self.powerpoint.Visible = visible
+            except Exception as e:
+                logger.warning(f"PowerPoint Visible設定をスキップしました: {e}")
+                # 続行可能
 
             logger.info("PowerPointアプリケーション初期化完了")
 
@@ -321,12 +325,13 @@ class PPTXToPDFConverter:
                 1
             )
 
-            # PDFとして保存
+            # PDFとして保存 (ExportAsFixedFormatを使用)
             # ppFixedFormatTypePDF = 2
-            presentation.SaveAs(
+            # PrintRange=None is required to avoid COM object error
+            presentation.ExportAsFixedFormat(
                 str(pdf_path.resolve()),
-                FileFormat=32,  # ppSaveAsPDF
-                Intent=quality
+                2,  # ppFixedFormatTypePDF
+                PrintRange=None
             )
 
             logger.info(f"変換成功: {pdf_path.name}")
@@ -520,7 +525,7 @@ def main():
         print("  cp configs/local_convert.yaml.template configs/local_convert.yaml")
         sys.exit(1)
 
-    with open(args.config) as f:
+    with open(args.config, encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     # ログディレクトリ作成
