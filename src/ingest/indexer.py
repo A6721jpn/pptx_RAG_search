@@ -176,12 +176,33 @@ class QdrantIndexer:
         """
         logger.info(f"検索実行: top_k={top_k}")
 
-        results = self.client.query_points(
-            collection_name=self.collection_name,
-            query=query_vector.tolist(),
-            limit=top_k,
-            score_threshold=score_threshold
-        ).points
+        if hasattr(self.client, 'query_points'):
+            # 新しいAPI (v1.7.0+)
+            # Note: score_threshold arg might not be supported in some versions of query_points explicitly or behaves differently
+            # Safest is to use search() compatibility if unsure, but let's try strict query_points if available
+            try:
+                results = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector.tolist(),
+                    limit=top_k,
+                    score_threshold=score_threshold if score_threshold > 0 else None
+                ).points
+            except TypeError:
+                # Fallback if arguments differ
+                results = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=query_vector.tolist(),
+                    limit=top_k,
+                    score_threshold=score_threshold
+                )
+        else:
+            # 古いAPI
+            results = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector.tolist(),
+                limit=top_k,
+                score_threshold=score_threshold
+            )
 
         # 結果を整形
         formatted_results = []
