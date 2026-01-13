@@ -199,12 +199,20 @@ class QdrantIndexer:
     def get_collection_info(self) -> Dict:
         """コレクション情報を取得"""
         info = self.client.get_collection(self.collection_name)
-        return {
+
+        # Qdrant APIバージョンによって属性が異なるため安全に取得
+        result = {
             "collection_name": self.collection_name,
-            "vectors_count": info.vectors_count,
-            "indexed_vectors_count": info.indexed_vectors_count,
-            "points_count": info.points_count
+            "points_count": info.points_count if hasattr(info, 'points_count') else 0
         }
+
+        # オプショナルな属性を安全に取得
+        if hasattr(info, 'vectors_count'):
+            result["vectors_count"] = info.vectors_count
+        if hasattr(info, 'indexed_vectors_count'):
+            result["indexed_vectors_count"] = info.indexed_vectors_count
+
+        return result
 
 
 # 使用例
