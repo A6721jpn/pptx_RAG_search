@@ -1,10 +1,8 @@
 """
 PDF版ローカルPOC
-Power AutomateでPDF化されたファイルをOneDrive同期フォルダから処理
-PowerPoint COM不要で軽量・高速
+PDFからテキスト抽出、埋め込み計算、Qdrantインデックス化まで一貫処理
 """
 
-import asyncio
 from pathlib import Path
 from datetime import datetime
 import hashlib
@@ -15,6 +13,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from utils.db_manager import ProcessedFilesDB
+from ingest.embeddings import TextEmbedder
+from ingest.indexer import QdrantIndexer
 
 # ロギング設定
 logging.basicConfig(
@@ -28,40 +28,46 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class PDFScanner:
-    """PDFフォルダからファイルをスキャン"""
+class PDFPOCProcessor:
+    """PDF処理からインデックス化までの統合プロセッサ"""
 
-    def __init__(self, source_dir: Path, db_path: Path):
+    def __init__(self, source_dir: Path, db_path: Path, qdrant_path: str):
         """
         Args:
-            source_dir: PDF同期フォルダのパス
+            source_dir: PDFフォルダのパス
             db_path: 処理状態データベースのパス
+            qdrant_path: Qdrantストレージパス
         """
         self.source_dir = source_dir
         self.db = ProcessedFilesDB(db_path)
 
-    def scan_pdf_files(self) -> list:
-        """
-        PDFファイルを再帰的にスキャン
+        # 埋め込みとインデックス初期化
+        self.embedder = TextEmbedder(model_name="intfloat/e5-base-v2", device="cpu")
+        self.indexer = QdrantIndexer(storage_path=qdrant_path)
 
-        Returns:
-            ファイル情報のリスト
-        """
+        # 初回のみQdrant初期化
+        self._qdrant_initialized = False
+
+    def _ensure_qdrant_initialized(self):
+        """Qdrant初期化（初回のみ）"""
+        if not self._qdrant_initialized:
+            vector_dim = self.embedder.get_dimension()
+            self.indexer.initialize(vector_dimension=vector_dim)
+            self._qdrant_initialized = True
+
+    def scan_pdf_files(self) -> list:
+        """PDFファイルをスキャン"""
         logger.info(f"スキャン開始: {self.source_dir}")
 
         pdf_files = []
 
-        # .pdf ファイルを再帰的に検索
         for file_path in self.source_dir.glob('**/*.pdf'):
-            # 一時ファイルをスキップ
             if file_path.name.startswith('.'):
                 continue
 
-            # ファイル情報を取得
             stat = file_path.stat()
-
             file_info = {
-                'id': self.compute_file_id(file_path),
+                'id': self._compute_file_id(file_path),
                 'name': file_path.name,
                 'path': str(file_path.relative_to(self.source_dir)),
                 'full_path': str(file_path),
@@ -74,12 +80,11 @@ class PDFScanner:
         logger.info(f"検出ファイル数: {len(pdf_files)}")
         return pdf_files
 
-    def compute_file_id(self, file_path: Path) -> str:
+    def _compute_file_id(self, file_path: Path) -> str:
         """ファイルパスからIDを生成"""
-        normalized_path = str(file_path.resolve())
-        return hashlib.sha1(normalized_path.encode()).hexdigest()[:12]
+        return hashlib.sha1(str(file_path.resolve()).encode()).hexdigest()[:12]
 
-    def compute_doc_id(self, file_path: Path) -> str:
+    def _compute_doc_id(self, file_path: Path) -> str:
         """ファイル内容からドキュメントIDを生成"""
         sha1 = hashlib.sha1()
         with open(file_path, 'rb') as f:
@@ -88,15 +93,7 @@ class PDFScanner:
         return sha1.hexdigest()[:12]
 
     def extract_text_from_pdf(self, pdf_path: Path) -> list:
-        """
-        PDFからテキストを抽出
-
-        Args:
-            pdf_path: PDFファイルパス
-
-        Returns:
-            ページごとのテキストリスト
-        """
+        """PDFからテキストを抽出"""
         try:
             import pdfplumber
         except ImportError:
@@ -112,45 +109,28 @@ class PDFScanner:
                     'page_num': page_num,
                     'text': text.strip()
                 })
-                logger.debug(f"  ページ{page_num}: {len(text)}文字")
 
         logger.info(f"テキスト抽出完了: {len(pages_text)}ページ")
         return pages_text
 
     def render_pdf_pages(self, pdf_path: Path, output_dir: Path) -> list:
-        """
-        PDFページを画像にレンダリング
-
-        Args:
-            pdf_path: PDFファイルパス
-            output_dir: 出力ディレクトリ
-
-        Returns:
-            生成された画像ファイルパスのリスト
-        """
+        """PDFページを画像にレンダリング"""
         try:
             from pdf2image import convert_from_path
         except ImportError:
             logger.error("pdf2imageがインストールされていません: pip install pdf2image")
-            logger.error("また、popplerが必要です（Windows: https://github.com/oschwartz10612/poppler-windows/releases/）")
+            logger.error("popplerも必要です: https://github.com/oschwartz10612/poppler-windows/releases/")
             raise
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # PDFを画像に変換
-        images = convert_from_path(
-            pdf_path,
-            dpi=150,  # 解像度（高いほど品質向上、処理時間増）
-            fmt='png'
-        )
+        images = convert_from_path(pdf_path, dpi=150, fmt='png')
 
         image_paths = []
-
         for i, image in enumerate(images, 1):
             image_path = output_dir / f"page_{i:04d}.png"
             image.save(image_path, 'PNG')
             image_paths.append(image_path)
-            logger.debug(f"  ページ{i}レンダリング完了: {image_path}")
 
         logger.info(f"レンダリング完了: {len(image_paths)}ページ")
         return image_paths
@@ -160,29 +140,19 @@ class PDFScanner:
         all_files = self.scan_pdf_files()
 
         if not incremental:
-            logger.info("フルスキャンモード: すべてのファイルを処理対象にします")
+            logger.info("フルスキャンモード: すべてのファイルを処理")
             return all_files
 
-        # 増分モード: 変更されたファイルのみ
         files_to_process = []
         for file_info in all_files:
-            needs_processing = self.db.add_or_update_file(file_info)
-            if needs_processing:
+            if self.db.add_or_update_file(file_info):
                 files_to_process.append(file_info)
 
-        logger.info(f"処理対象ファイル数: {len(files_to_process)} / {len(all_files)}")
+        logger.info(f"処理対象: {len(files_to_process)} / {len(all_files)}")
         return files_to_process
 
     def process_file(self, file_info: dict) -> dict:
-        """
-        単一PDFファイルを処理
-
-        Args:
-            file_info: ファイル情報
-
-        Returns:
-            処理結果
-        """
+        """単一PDFファイルを処理"""
         file_id = file_info['id']
         file_path = Path(file_info['full_path'])
 
@@ -191,37 +161,36 @@ class PDFScanner:
         try:
             self.db.update_status(file_id, 'processing')
 
-            # ドキュメントID生成
-            doc_id = self.compute_doc_id(file_path)
+            doc_id = self._compute_doc_id(file_path)
             logger.info(f"処理開始: {file_info['name']} (doc_id: {doc_id})")
 
             # 1. テキスト抽出
             logger.info("  [1/4] テキスト抽出中...")
-            pages_text = self.extract_text_from_pdf(file_path)
+            pages = self.extract_text_from_pdf(file_path)
 
-            # 2. ページ画像のレンダリング
+            # 2. ページレンダリング
             logger.info("  [2/4] ページレンダリング中...")
             rendered_dir = Path('data/rendered') / doc_id
             image_paths = self.render_pdf_pages(file_path, rendered_dir)
 
-            page_count = len(pages_text)
+            # ページ情報に画像パスを追加
+            for page_info, img_path in zip(pages, image_paths):
+                page_info['image_path'] = img_path
 
-            # ========== ここに実際の埋め込み・インデックス処理を実装 ==========
-            #
             # 3. 埋め込み計算
-            #    logger.info("  [3/4] 埋め込み計算中...")
-            #    from ingest.build_index import compute_embeddings
-            #    embeddings = compute_embeddings(pages_text, image_paths)
-            #
-            # 4. Qdrantインデックス更新
-            #    logger.info("  [4/4] インデックス更新中...")
-            #    from ingest.build_index import update_index
-            #    update_index(doc_id, embeddings)
-            #
-            # ===============================================================
+            logger.info("  [3/4] 埋め込み計算中...")
+            texts = [p['text'] for p in pages]
+            embeddings = self.embedder.embed_texts(texts, batch_size=16)
 
-            logger.info("  [3/4] 埋め込み計算中... (スキップ - 未実装)")
-            logger.info("  [4/4] インデックス更新中... (スキップ - 未実装)")
+            # 4. Qdrantインデックス更新
+            logger.info("  [4/4] インデックス更新中...")
+            self._ensure_qdrant_initialized()
+            self.indexer.index_pages(
+                doc_id=doc_id,
+                file_name=file_info['name'],
+                pages=pages,
+                embeddings=embeddings
+            )
 
             # 処理完了
             duration = (datetime.now() - start_time).total_seconds()
@@ -229,16 +198,16 @@ class PDFScanner:
                 file_id,
                 'success',
                 doc_id=doc_id,
-                slide_count=page_count,
+                slide_count=len(pages),
                 duration=duration
             )
 
-            logger.info(f"処理完了: {file_info['name']} ({duration:.2f}秒, {page_count}ページ)")
+            logger.info(f"処理完了: {file_info['name']} ({duration:.2f}秒, {len(pages)}ページ)")
 
             return {
                 'file_id': file_id,
                 'doc_id': doc_id,
-                'page_count': page_count,
+                'page_count': len(pages),
                 'duration': duration,
                 'status': 'success'
             }
@@ -248,6 +217,7 @@ class PDFScanner:
             logger.error(f"処理エラー ({file_info['name']}): {e}")
             import traceback
             traceback.print_exc()
+
             self.db.update_status(file_id, 'failed', str(e), duration=duration)
 
             return {
@@ -289,18 +259,19 @@ class PDFScanner:
             else:
                 total_failed += 1
 
-        # パイプライン完了
+        # 完了
         duration = (datetime.now() - pipeline_start).total_seconds()
-
-        # 最終統計
         stats = self.db.get_statistics()
+
+        # Qdrant情報
+        qdrant_info = self.indexer.get_collection_info()
 
         logger.info(f"\n=== POC完了 ===")
         logger.info(f"処理時間: {duration:.2f}秒")
         logger.info(f"成功: {total_processed}")
         logger.info(f"失敗: {total_failed}")
         logger.info(f"総ページ数: {total_pages}")
-        logger.info(f"平均処理時間: {stats.get('avg_processing_seconds', 0):.2f}秒/ファイル")
+        logger.info(f"Qdrantポイント数: {qdrant_info['points_count']}")
 
         return {
             'status': 'success',
@@ -308,7 +279,8 @@ class PDFScanner:
             'files_failed': total_failed,
             'total_pages': total_pages,
             'duration_seconds': duration,
-            'statistics': stats
+            'statistics': stats,
+            'qdrant_info': qdrant_info
         }
 
 
@@ -316,80 +288,67 @@ def main():
     """メイン関数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="PDF同期フォルダからPOC実行")
+    parser = argparse.ArgumentParser(description="PDF版ローカルPOC")
     parser.add_argument(
         '--source',
         type=Path,
         required=True,
-        help='PDF同期フォルダのパス（例: C:\\Users\\YourName\\OneDrive - Company\\Site - Documents\\PDF_Converted）'
+        help='PDFフォルダのパス'
     )
     parser.add_argument(
         '--incremental',
         action='store_true',
-        help='増分処理モード（変更されたファイルのみ）'
+        help='増分処理モード'
     )
     parser.add_argument(
         '--full',
         action='store_true',
-        help='フルスキャンモード（すべてのファイルを再処理）'
+        help='フルスキャンモード'
+    )
+    parser.add_argument(
+        '--qdrant',
+        type=str,
+        default='index/qdrant_storage',
+        help='Qdrantストレージパス'
     )
 
     args = parser.parse_args()
 
-    # ソースディレクトリの確認
+    # ソースディレクトリ確認
     if not args.source.exists():
         print(f"❌ エラー: ディレクトリが見つかりません: {args.source}")
-        print("\nPDF同期フォルダのパスを確認してください。")
-        print("例: C:\\Users\\YourName\\OneDrive - Company\\Site - Documents\\PDF_Converted")
-        sys.exit(1)
-
-    if not args.source.is_dir():
-        print(f"❌ エラー: パスがディレクトリではありません: {args.source}")
-        sys.exit(1)
-
-    # 必要なライブラリの確認
-    try:
-        import pdfplumber
-        import pdf2image
-    except ImportError as e:
-        print(f"❌ エラー: 必要なライブラリがインストールされていません")
-        print("\n以下のコマンドでインストールしてください:")
-        print("  pip install pdfplumber pdf2image")
-        print("\nまた、pdf2imageにはpopplerが必要です:")
-        print("  Windows: https://github.com/oschwartz10612/poppler-windows/releases/")
-        print("  ダウンロード後、PATHに追加してください")
         sys.exit(1)
 
     # データディレクトリ作成
     Path('data/logs').mkdir(parents=True, exist_ok=True)
     Path('data/rendered').mkdir(parents=True, exist_ok=True)
 
-    # スキャナー作成
-    scanner = PDFScanner(
+    # プロセッサ作成
+    processor = PDFPOCProcessor(
         source_dir=args.source,
-        db_path=Path('data/processed_files_pdf.db')
+        db_path=Path('data/processed_files_pdf.db'),
+        qdrant_path=args.qdrant
     )
 
     # POC実行
     try:
-        result = scanner.run(incremental=not args.full)
+        result = processor.run(incremental=not args.full)
 
         # 結果出力
         print("\n" + "="*50)
         print("処理結果:")
         print(f"  ステータス: {result['status']}")
-        if result['status'] == 'success':
-            print(f"  処理ファイル数: {result['files_processed']}")
-            print(f"  失敗ファイル数: {result['files_failed']}")
-            print(f"  総ページ数: {result['total_pages']}")
-            print(f"  処理時間: {result['duration_seconds']:.2f}秒")
+        print(f"  処理ファイル数: {result['files_processed']}")
+        print(f"  失敗ファイル数: {result['files_failed']}")
+        print(f"  総ページ数: {result['total_pages']}")
+        print(f"  処理時間: {result['duration_seconds']:.2f}秒")
 
-            if result['files_processed'] > 0:
-                avg_time = result['duration_seconds'] / result['files_processed']
-                print(f"  平均処理時間: {avg_time:.2f}秒/ファイル")
-        else:
-            print(f"  エラー: {result.get('error')}")
+        if result.get('qdrant_info'):
+            print(f"  Qdrantポイント数: {result['qdrant_info']['points_count']}")
+
         print("="*50)
+
+        sys.exit(0 if result['files_failed'] == 0 else 1)
 
     except KeyboardInterrupt:
         print("\n\n処理が中断されました")
